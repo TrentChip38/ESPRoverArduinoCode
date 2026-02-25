@@ -98,7 +98,7 @@ void handle_stream() {
     esp_camera_fb_return(fb);
 
     // Yield to allow other requests
-    if (millis() - lastFrame > 60) {
+    if (millis() - lastFrame > 10) {
       lastFrame = millis();
       server.handleClient();
     }
