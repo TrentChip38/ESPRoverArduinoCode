@@ -48,54 +48,43 @@ void handle_battery() {
   float voltage = readBatteryVoltage();
   server.send(200, "text/plain", String(voltage, 2));
 }
-void handle_rssi() {
-  int rssi = WiFi.RSSI();
-  Serial.print("RSSI request: ");
-  Serial.println(rssi);
-  server.send(200, "text/plain", String(rssi));
-}
-void handle_move() {
 
-  if (!server.hasArg("dir")) {
-    server.send(400, "text/plain", "Missing dir");
-    return;
-  }
-
-  String dir = server.arg("dir");
-
-  Serial.print("Joystick direction: ");
-  Serial.println(dir);
-
-  // ===== MOTOR CONTROL HOOKS =====
-  if (dir == "up") {
-    moveForward();
-  }
-  else if (dir == "down") {
-    moveBackward();
-  }
-  else if (dir == "left") {
-    turnLeft();
-  }
-  else if (dir == "right") {
-    turnRight();
-  }
-  else if (dir == "stop") {
-    stopMotors();
-  }
-
-  server.send(200, "text/plain", "OK");
-}
 
 // ================= STREAM HANDLER =================
-void handle_stream() {
+// void handle_stream() {
 
+//   WiFiClient client = server.client();
+
+//   client.println("HTTP/1.1 200 OK");
+//   client.println("Content-Type: multipart/x-mixed-replace; boundary=frame");
+//   client.println();
+
+//   while (client.connected()) {
+
+//     camera_fb_t * fb = esp_camera_fb_get();
+//     if (!fb) continue;
+
+//     client.println("--frame");
+//     client.println("Content-Type: image/jpeg");
+//     client.println();
+//     client.write(fb->buf, fb->len);
+//     client.println();
+
+//     esp_camera_fb_return(fb);
+
+//     delay(60); // stable FPS
+//   }
+// }
+void handle_stream() {
   WiFiClient client = server.client();
 
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: multipart/x-mixed-replace; boundary=frame");
   client.println();
 
+  unsigned long lastFrame = millis();
   while (client.connected()) {
+    //if (server.hasClient()) break; // Allow other requests
 
     camera_fb_t * fb = esp_camera_fb_get();
     if (!fb) continue;
@@ -108,7 +97,11 @@ void handle_stream() {
 
     esp_camera_fb_return(fb);
 
-    delay(60); // stable FPS
+    // Yield to allow other requests
+    if (millis() - lastFrame > 60) {
+      lastFrame = millis();
+      server.handleClient();
+    }
   }
 }
 
@@ -127,121 +120,149 @@ body {
   text-align:center;
   font-family:Arial;
 }
+
 img {
   width:95%;
   max-width:480px;
   border-radius:12px;
   margin-top:20px;
 }
+
+#battery, #rssi {
+  position: fixed;
+  right: 10px;
+  font-size: 14px;
+  background: rgba(0,0,0,0.4);
+  padding: 5px 10px;
+  border-radius: 8px;
+}
+
+#battery { top: 10px; }
+#rssi { top: 45px; }
+
+#joystick {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 150px;
+  height: 150px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 50%;
+  touch-action: none;
+}
+
+#stick {
+  width: 60px;
+  height: 60px;
+  background: #4da6ff;
+  border-radius: 50%;
+  position: absolute;
+  top: 45px;
+  left: 45px;
+}
 </style>
-<div id="telemetry" style="
-position: fixed;
-top: 10px;
-left: 10px;
-background: rgba(0,0,0,0.4);
-padding: 8px;
-border-radius: 10px;
-font-size:14px;">
-Battery: <span id="battery">--</span> V<br>
-Signal: <span id="rssi">--</span> dBm
-</div>
-<script>
-// ===== RSSI UPDATE =====
-function updateRSSI() {
-  fetch('/rssi')
-    .then(r => r.text())
-    .then(data => {
-      document.getElementById("rssi").innerHTML = data;
-    });
-}
-
-setInterval(updateRSSI, 2000);
-updateRSSI();
-
-// ===== JOYSTICK =====
-let stick = document.getElementById("stick");
-let container = document.getElementById("joystickContainer");
-
-let center = 80;
-let active = false;
-
-container.addEventListener("touchstart", e => active = true);
-container.addEventListener("touchend", e => {
-  active = false;
-  stick.style.left = "45px";
-  stick.style.top = "45px";
-  fetch('/move?dir=stop');
-});
-
-container.addEventListener("touchmove", e => {
-
-  if (!active) return;
-
-  let rect = container.getBoundingClientRect();
-  let touch = e.touches[0];
-
-  let x = touch.clientX - rect.left - center;
-  let y = touch.clientY - rect.top - center;
-
-  let angle = Math.atan2(y, x);
-  let distance = Math.min(60, Math.sqrt(x*x + y*y));
-
-  let stickX = center + distance * Math.cos(angle);
-  let stickY = center + distance * Math.sin(angle);
-
-  stick.style.left = (stickX - 35) + "px";
-  stick.style.top = (stickY - 35) + "px";
-
-  // Direction logic
-  if (Math.abs(x) > Math.abs(y)) {
-    if (x > 20) fetch('/move?dir=right');
-    else if (x < -20) fetch('/move?dir=left');
-  } else {
-    if (y > 20) fetch('/move?dir=down');
-    else if (y < -20) fetch('/move?dir=up');
-  }
-
-});
-function updateBattery() {
-  fetch('/battery')
-    .then(response => response.text())
-    .then(data => {
-      document.getElementById("battery").innerHTML = 
-        "Battery: " + data + " V";
-    });
-}
-
-setInterval(updateBattery, 2000); // every 2 seconds
-updateBattery();
-</script>
 </head>
 <body>
 
 <h2>ESP32-CAM Live Stream</h2>
 
 <img src="/stream">
-<div id="joystickContainer" style="
-position: fixed;
-bottom: 40px;
-left: 50%;
-transform: translateX(-50%);
-width: 160px;
-height: 160px;
-background: rgba(255,255,255,0.1);
-border-radius: 50%;
-">
 
-<div id="stick" style="
-width: 70px;
-height: 70px;
-background: #3aa0ff;
-border-radius: 50%;
-position: absolute;
-top: 45px;
-left: 45px;">
+<div id="battery">Battery: -- V</div>
+<div id="rssi">Signal: -- dBm</div>
+
+<div id="joystick">
+  <div id="stick"></div>
 </div>
 
-</div>
+<script>
+function updateBattery() {
+  fetch('/battery')
+    .then(r => r.text())
+    .then(data => {
+      document.getElementById("battery").innerHTML =
+        "Battery: " + data + " V";
+    });
+}
+
+function updateRSSI() {
+  fetch('/rssi')
+    .then(r => r.text())
+    .then(data => {
+      document.getElementById("rssi").innerHTML =
+        "Signal: " + data + " dBm";
+    });
+}
+
+setInterval(updateBattery, 2000);
+setInterval(updateRSSI, 2000);
+updateBattery();
+updateRSSI();
+
+// ================= JOYSTICK =================
+let lastDir = "stop";
+let joy = document.getElementById("joystick");
+let stick = document.getElementById("stick");
+
+let centerX = joy.offsetWidth/2;
+let centerY = joy.offsetHeight/2;
+let dragging = false;
+
+function sendDir(dir) {
+  if (dir !== lastDir) {
+    fetch("/joystick?dir=" + dir);
+    lastDir = dir;
+  }
+}
+
+joy.addEventListener("touchstart", e => {
+  dragging = true;
+});
+
+joy.addEventListener("touchend", e => {
+  dragging = false;
+  stick.style.left = "45px";
+  stick.style.top = "45px";
+  sendDir("stop");
+});
+
+joy.addEventListener("touchmove", e => {
+  if (!dragging) return;
+
+  let rect = joy.getBoundingClientRect();
+  let touch = e.touches[0];
+
+  let x = touch.clientX - rect.left;
+  let y = touch.clientY - rect.top;
+
+  let dx = x - centerX;
+  let dy = y - centerY;
+
+  let distance = Math.sqrt(dx*dx + dy*dy);
+  let max = 50;
+
+  if (distance > max) {
+    dx *= max/distance;
+    dy *= max/distance;
+  }
+
+  stick.style.left = (centerX + dx - 30) + "px";
+  stick.style.top = (centerY + dy - 30) + "px";
+
+  // Direction detection
+  let dir = "stop";
+  if (Math.abs(dx) > Math.abs(dy)) {
+    if (dx > 20) dir = "right";
+    else if (dx < -20) dir = "left";
+  } else {
+    if (dy > 20) dir = "down";
+    else if (dy < -20) dir = "up";
+  }
+  sendDir(dir);
+});
+</script>
+
 </body>
 </html>
 )rawliteral";
@@ -249,10 +270,10 @@ left: 45px;">
   server.send(200, "text/html", html);
 }
 // ================= RSSI =================
-// void handle_rssi() {
-//   int rssi = WiFi.RSSI();
-//   server.send(200, "text/plain", String(rssi));
-// }
+void handle_rssi() {
+  int rssi = WiFi.RSSI();
+  server.send(200, "text/plain", String(rssi));
+}
 
 // ================= MOTOR CONTROL =================
 void moveUp() {
@@ -271,9 +292,9 @@ void moveRight() {
   Serial.println("MOTOR: RIGHT");
 }
 
-// void stopMotors() {
-//   Serial.println("MOTOR: STOP");
-// }
+void stopMotors() {
+  Serial.println("MOTOR: STOP");
+}
 
 // Handle joystick direction from web
 void handle_joystick() {
@@ -329,10 +350,10 @@ void setup() {
   pinMode(BATTERY_PIN, INPUT);
 
   server.on("/", handle_root);
-  server.on("/move", handle_move);
   server.on("/stream", HTTP_GET, handle_stream);
   server.on("/battery", handle_battery);
-  server.on("/rssi", handle_rssi);
+  server.on("/rssi", HTTP_GET, handle_rssi);
+  server.on("/joystick", HTTP_GET, handle_joystick);
 
   server.begin();
 
@@ -342,25 +363,4 @@ void setup() {
 
 void loop() {
   server.handleClient();
-}
-
-void moveForward() {
-  Serial.println("MOTOR: Forward");
-  // TODO: Add motor driver code
-}
-
-void moveBackward() {
-  Serial.println("MOTOR: Backward");
-}
-
-void turnLeft() {
-  Serial.println("MOTOR: Left");
-}
-
-void turnRight() {
-  Serial.println("MOTOR: Right");
-}
-
-void stopMotors() {
-  Serial.println("MOTOR: Stop");
 }
