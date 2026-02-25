@@ -91,37 +91,48 @@ body {
   text-align:center;
   font-family:Arial;
 }
+
 img {
   width:95%;
   max-width:480px;
   border-radius:12px;
   margin-top:20px;
 }
-</style>
-<div id="battery" style="
-position: fixed;
-top: 10px;
-right: 10px;
-color: white;
-font-size: 16px;
-background: rgba(0,0,0,0.4);
-padding: 5px 10px;
-border-radius: 8px;">
-Battery: -- V
-</div>
-<script>
-function updateBattery() {
-  fetch('/battery')
-    .then(response => response.text())
-    .then(data => {
-      document.getElementById("battery").innerHTML = 
-        "Battery: " + data + " V";
-    });
+
+#battery, #rssi {
+  position: fixed;
+  right: 10px;
+  font-size: 14px;
+  background: rgba(0,0,0,0.4);
+  padding: 5px 10px;
+  border-radius: 8px;
 }
 
-setInterval(updateBattery, 2000); // every 2 seconds
-updateBattery();
-</script>
+#battery { top: 10px; }
+#rssi { top: 45px; }
+
+#joystick {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 150px;
+  height: 150px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 50%;
+  touch-action: none;
+}
+
+#stick {
+  width: 60px;
+  height: 60px;
+  background: #4da6ff;
+  border-radius: 50%;
+  position: absolute;
+  top: 45px;
+  left: 45px;
+}
+</style>
 </head>
 <body>
 
@@ -129,13 +140,136 @@ updateBattery();
 
 <img src="/stream">
 
+<div id="battery">Battery: -- V</div>
+<div id="rssi">Signal: -- dBm</div>
+
+<div id="joystick">
+  <div id="stick"></div>
+</div>
+
+<script>
+function updateBattery() {
+  fetch('/battery')
+    .then(r => r.text())
+    .then(data => {
+      document.getElementById("battery").innerHTML =
+        "Battery: " + data + " V";
+    });
+}
+
+function updateRSSI() {
+  fetch('/rssi')
+    .then(r => r.text())
+    .then(data => {
+      document.getElementById("rssi").innerHTML =
+        "Signal: " + data + " dBm";
+    });
+}
+
+setInterval(updateBattery, 2000);
+setInterval(updateRSSI, 2000);
+updateBattery();
+updateRSSI();
+
+// ================= JOYSTICK =================
+
+const joy = document.getElementById("joystick");
+const stick = document.getElementById("stick");
+
+let centerX = joy.offsetWidth/2;
+let centerY = joy.offsetHeight/2;
+let dragging = false;
+
+joy.addEventListener("touchstart", e => {
+  dragging = true;
+});
+
+joy.addEventListener("touchend", e => {
+  dragging = false;
+  stick.style.left = "45px";
+  stick.style.top = "45px";
+  fetch("/joystick?dir=stop");
+});
+
+joy.addEventListener("touchmove", e => {
+  if (!dragging) return;
+
+  let rect = joy.getBoundingClientRect();
+  let touch = e.touches[0];
+
+  let x = touch.clientX - rect.left;
+  let y = touch.clientY - rect.top;
+
+  let dx = x - centerX;
+  let dy = y - centerY;
+
+  let distance = Math.sqrt(dx*dx + dy*dy);
+  let max = 50;
+
+  if (distance > max) {
+    dx *= max/distance;
+    dy *= max/distance;
+  }
+
+  stick.style.left = (centerX + dx - 30) + "px";
+  stick.style.top = (centerY + dy - 30) + "px";
+
+  // Direction detection
+  if (Math.abs(dx) > Math.abs(dy)) {
+    if (dx > 20) fetch("/joystick?dir=right");
+    else if (dx < -20) fetch("/joystick?dir=left");
+  } else {
+    if (dy > 20) fetch("/joystick?dir=down");
+    else if (dy < -20) fetch("/joystick?dir=up");
+  }
+});
+</script>
+
 </body>
 </html>
 )rawliteral";
 
   server.send(200, "text/html", html);
 }
+// ================= RSSI =================
+void handle_rssi() {
+  int rssi = WiFi.RSSI();
+  server.send(200, "text/plain", String(rssi));
+}
 
+// ================= MOTOR CONTROL =================
+void moveUp() {
+  Serial.println("MOTOR: UP");
+}
+
+void moveDown() {
+  Serial.println("MOTOR: DOWN");
+}
+
+void moveLeft() {
+  Serial.println("MOTOR: LEFT");
+}
+
+void moveRight() {
+  Serial.println("MOTOR: RIGHT");
+}
+
+void stopMotors() {
+  Serial.println("MOTOR: STOP");
+}
+
+// Handle joystick direction from web
+void handle_joystick() {
+  String dir = server.arg("dir");
+
+  if (dir == "up") moveUp();
+  else if (dir == "down") moveDown();
+  else if (dir == "left") moveLeft();
+  else if (dir == "right") moveRight();
+  else stopMotors();
+
+  server.send(200, "text/plain", "OK");
+}
 // ================= SETUP =================
 void setup() {
 
@@ -180,6 +314,8 @@ void setup() {
   server.on("/", handle_root);
   server.on("/stream", HTTP_GET, handle_stream);
   server.on("/battery", handle_battery);
+  server.on("/rssi", HTTP_GET, handle_rssi);
+  server.on("/joystick", HTTP_GET, handle_joystick);
 
   server.begin();
 
