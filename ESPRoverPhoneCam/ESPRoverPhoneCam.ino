@@ -23,7 +23,32 @@
 #define WIFI_SSID "ESP_CAM_AP"
 #define WIFI_PASS "12345678"
 
+#define BATTERY_PIN 33
+#define R1 100000.0
+#define R2 100000.0
+
 WebServer server(80);
+
+float readBatteryVoltage() {
+
+  long total = 0;
+  for(int i=0;i<10;i++){
+    total += analogRead(BATTERY_PIN);
+    delay(2);
+  }
+
+  float raw = total / 10.0;
+
+  float adcVoltage = (raw / 4095.0) * 3.3;
+  float batteryVoltage = adcVoltage * ((R1 + R2) / R2);
+
+  return batteryVoltage;
+}
+void handle_battery() {
+  float voltage = readBatteryVoltage();
+  server.send(200, "text/plain", String(voltage, 2));
+}
+
 
 // ================= STREAM HANDLER =================
 void handle_stream() {
@@ -73,6 +98,30 @@ img {
   margin-top:20px;
 }
 </style>
+<div id="battery" style="
+position: fixed;
+top: 10px;
+right: 10px;
+color: white;
+font-size: 16px;
+background: rgba(0,0,0,0.4);
+padding: 5px 10px;
+border-radius: 8px;">
+Battery: -- V
+</div>
+<script>
+function updateBattery() {
+  fetch('/battery')
+    .then(response => response.text())
+    .then(data => {
+      document.getElementById("battery").innerHTML = 
+        "Battery: " + data + " V";
+    });
+}
+
+setInterval(updateBattery, 2000); // every 2 seconds
+updateBattery();
+</script>
 </head>
 <body>
 
@@ -124,8 +173,13 @@ void setup() {
 
   WiFi.softAP(WIFI_SSID, WIFI_PASS);
 
+  analogReadResolution(12);
+  analogSetAttenuation(ADC_11db);  // allows reading up to ~3.6V
+  pinMode(BATTERY_PIN, INPUT);
+
   server.on("/", handle_root);
   server.on("/stream", HTTP_GET, handle_stream);
+  server.on("/battery", handle_battery);
 
   server.begin();
 
