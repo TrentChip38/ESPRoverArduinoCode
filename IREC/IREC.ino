@@ -323,6 +323,8 @@ void loop() {
   }
 }*/
 
+//***************************************************************************field
+
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
@@ -409,8 +411,16 @@ String generatePayload() {
 // Setup
 // -----------------------------
 unsigned long lastSend = 0;
-const unsigned long sendInterval = 10000; // 10 seconds
+const unsigned long sendInterval = 5000; // 5 seconds
 
+//Motor pins
+int E1 = 33;
+int M1 = 32;
+int E2 = 34;
+int M2 = 35;
+//Sens pin
+int sense = 25;
+int speedValue = 200;
 void setup() {
   Serial.begin(115200);
   delay(500);
@@ -441,6 +451,14 @@ void setup() {
 
   LoRa.onReceive(onReceive);
   LoRa.receive();
+
+  //Set up for pin sensing
+  pinMode(sense, INPUT);
+  //Set up motor pins
+  pinMode(M1, OUTPUT);
+  pinMode(M2, OUTPUT);
+  //pinMode(E1, OUTPUT);
+  //pinMode(E2, OUTPUT);
 }
 
 // -----------------------------
@@ -489,7 +507,7 @@ void loop() {
     LoRa.receive(); // back to RX mode
   }
 
-  // Send packet every 10 seconds
+  // Send packet every 5 seconds
   if (millis() - lastSend > sendInterval) {
     lastSend = millis();
 
@@ -508,9 +526,18 @@ void loop() {
 
     LoRa.receive(); // back to RX
   }
+  if (digitalRead(sense) == HIGH){
+    delay(10000);
+    digitalWrite(M1,HIGH);//M1 is direction HIGH for clockwise low for counter clockwise
+    digitalWrite(M2,LOW);
+    analogWrite(E1, speedValue);   //PWM Speed Control
+    analogWrite(E2, speedValue);
+  }
 }
+//*/
 
 /*********************************************************BASE
+
 #include <SPI.h>
 #include <LoRa.h>
 
@@ -593,4 +620,4 @@ void loop() {
   }
 }
 
-*/
+//*/
