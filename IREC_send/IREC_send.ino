@@ -219,12 +219,15 @@ void loop() {
     Serial.println("\nSending LoRa packet:");
     Serial.println(payload);
 
+    String fullpayload = "CALL:KM7CUO;" + payload;
+
     LoRa.beginPacket();
     LoRa.write(0xFF);                 // broadcast
     LoRa.write(0xBB);                 // sender ID
     LoRa.write((byte)random(0, 255)); // message ID
-    LoRa.write(payload.length());
-    LoRa.print(payload);
+
+    LoRa.write(fullpayload.length());
+    LoRa.print(fullpayload);
     LoRa.endPacket();
 
     LoRa.receive(); // back to RX
