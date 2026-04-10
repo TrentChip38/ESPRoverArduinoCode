@@ -5,7 +5,7 @@
 LSM6DS3 imu(I2C_MODE, 0x6A);
 //Sample rate and thresholds
 const float LAUNCH_THRESHOLD = 8.0; // g
-const float LANDING_THRESHOLD = 1.5; // g
+const float LANDING_THRESHOLD = 1.05; // g
 const int sampleRateHz = 50;
 //ENUM for STATE
 enum SeedState {
