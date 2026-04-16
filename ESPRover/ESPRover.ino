@@ -1,5 +1,227 @@
-//Libraries: NimBLE-Arduino
+//Originally using the LoRa Deplus comm callback example code by Tom Igoe and Chris Drake
+//Libraries: NimBLE-Arduino, LoRa, Adafruit BME, TinyGPSPlusPlus
+/*Rover Wiring for all peripherals to the ESP32-WROOM-32E
+From peripheral to pin on ESP32
+Lora:
+Vcc -> 3.3v
+Miso -> 12
+Mosi -> 13
+SLCK -> 14
+NSS -> 15
+DIOD -> 26
+Rest -> 27
+GND -> GND
+BME:
+VIN -> 3.3v
+GND -> GND
+SCK -> 22
+SDI -> 21
+NEO GPS:
+Vcc -> 3.3v
+RX -> 17
+TX -> 16
+GND -> GND
+Motors:
+34,35
+32,33
+Sense Pin: 25 (Unused)
+*/
 #include <NimBLEDevice.h>
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
+#include <TinyGPS++.h>
+#include <HardwareSerial.h>
+#include <SPI.h>
+#include <LoRa.h>
+
+//Motor pins
+int E1 = 33;
+int M1 = 32;
+int E2 = 34;
+int M2 = 35;
+//Sens pin
+int sense = 25;
+int speedValue = 200;
+// -----------------------------
+// BME280 (I2C)
+// SDA = 21, SCL = 22
+// -----------------------------
+Adafruit_BME280 bme;
+// -----------------------------
+// GPS (NEO-6M) on UART1
+// RXD2 = 16 (ESP32 RX), TXD2 = 17 (ESP32 TX)
+// -----------------------------
+#define RXD2 16
+#define TXD2 17
+#define GPS_BAUD 9600
+TinyGPSPlus gps;
+HardwareSerial gpsSerial(1);
+// -----------------------------
+// LoRa Pin Mapping (ESP32 HSPI)
+// -----------------------------
+#define LORA_SCK   14
+#define LORA_MISO  12
+#define LORA_MOSI  13
+#define LORA_CS    15
+#define LORA_RST   27
+#define LORA_DIO0  26
+SPIClass hspi(HSPI);
+volatile bool packetReady = false;
+void onReceive(int packetSize) {
+  if (packetSize > 0) {
+    packetReady = true;
+  }
+}
+//Sensor Payload data
+String generatePayload() {
+  // BME280 readings
+  float temp     = bme.readTemperature();          // °C
+  float hum      = bme.readHumidity();             // %
+  float pressure = bme.readPressure();             // Pa
+
+  // GPS readings
+  float lat = 0.0, lon = 0.0, alt = 0.0;
+  if (gps.location.isValid()) {
+    lat = gps.location.lat();
+    lon = gps.location.lng();
+  }
+  if (gps.altitude.isValid()) {
+    alt = gps.altitude.meters();
+  }
+
+  // Dummy windspeed
+  float wind = random(0, 200) / 10.0;              // 0–20 m/s
+
+  String payload = "GPS(Lat:" + String(lat, 5) +
+                   ",Lon:" + String(lon, 5) +
+                   ",Alt:" + String(alt, 1) + ") ";
+
+  payload += "T:" + String(temp, 1);
+  payload += " H:" + String(hum, 1);
+  payload += " P:" + String(pressure / 100.0, 1); // hPa
+  payload += " W:" + String(wind, 1);
+
+  return payload;
+}
+unsigned long lastSend = 0;
+const unsigned long sendInterval = 5000; // 5 seconds
+
+//Functions from IREC_send original settup and loop
+void setupRover() {
+  //Wait untill "DEPLOY"
+
+  Serial.begin(115200);
+  delay(500);
+  Serial.println("\n=== ESP32 BME280 + GPS + LoRa Node Booting ===");
+
+  // I2C for BME280
+  Wire.begin();
+  if (!bme.begin(0x77)) {
+    Serial.println("Could not find a valid BME280 sensor at 0x77, check wiring!");
+    while (1);
+  }
+  Serial.println("BME280 init OK.");
+
+  // GPS UART
+  gpsSerial.begin(GPS_BAUD, SERIAL_8N1, RXD2, TXD2);
+  Serial.println("GPS UART init OK.");
+
+  // LoRa HSPI
+  hspi.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
+  LoRa.setSPI(hspi);
+  LoRa.setPins(LORA_CS, LORA_RST, LORA_DIO0);
+
+  if (!LoRa.begin(433E6)) {
+    Serial.println("LoRa init failed!");
+    while (1);
+  }
+  Serial.println("LoRa init OK.");
+
+  LoRa.onReceive(onReceive);
+  LoRa.receive();
+
+  //Set up for pin sensing
+  pinMode(sense, INPUT);
+  //Set up motor pins
+  pinMode(M1, OUTPUT);
+  pinMode(M2, OUTPUT);
+  //pinMode(E1, OUTPUT);
+  //pinMode(E2, OUTPUT);
+}
+void loopRover() {
+  // Continuously feed GPS parser
+  while (gpsSerial.available()) {
+    gps.encode(gpsSerial.read());
+  }
+
+  // Warn if GPS is not talking at all
+  static bool gpsWarned = false;
+  if (!gpsWarned && millis() > 5000 && gps.charsProcessed() < 10) {
+    Serial.println("No GPS detected: check wiring.");
+    gpsWarned = true;
+  }
+
+  // Handle incoming LoRa packets
+  if (packetReady) {
+    packetReady = false;
+
+    int packetSize = LoRa.parsePacket();
+    if (packetSize) {
+      int recipient = LoRa.read();
+      int sender    = LoRa.read();
+      int msgID     = LoRa.read();
+      int length    = LoRa.read();
+
+      String incoming = "";
+      while (LoRa.available()) {
+        incoming += (char)LoRa.read();
+      }
+
+      Serial.println("\n--- LoRa Packet Received ---");
+      Serial.println("From: 0x" + String(sender, HEX));
+      Serial.println("To:   0x" + String(recipient, HEX));
+      Serial.println("ID:   " + String(msgID));
+      Serial.println("Len:  " + String(length));
+      Serial.println("Data: " + incoming);
+      Serial.println("RSSI: " + String(LoRa.packetRssi()));
+      Serial.println("SNR:  " + String(LoRa.packetSnr()));
+      Serial.println("-----------------------------");
+    }
+
+    LoRa.receive(); // back to RX mode
+  }
+
+  // Send packet every 5 seconds
+  if (millis() - lastSend > sendInterval) {
+    lastSend = millis();
+
+    String payload = generatePayload();
+
+    Serial.println("\nSending LoRa packet:");
+    Serial.println(payload);
+
+    String fullpayload = "CALL:KM7CUO;" + payload;
+
+    LoRa.beginPacket();
+    LoRa.write(0xFF);                 // broadcast
+    LoRa.write(0xBB);                 // sender ID
+    LoRa.write((byte)random(0, 255)); // message ID
+
+    LoRa.write(fullpayload.length());
+    LoRa.print(fullpayload);
+    LoRa.endPacket();
+
+    LoRa.receive(); // back to RX
+  }
+  if (digitalRead(sense) == HIGH){
+    delay(10000);
+    digitalWrite(M1,HIGH);//M1 is direction HIGH for clockwise low for counter clockwise
+    digitalWrite(M2,LOW);
+    analogWrite(E1, speedValue);   //PWM Speed Control
+    analogWrite(E2, speedValue);
+  }
+}
 
 bool runRoverSettup = true;
 bool roverMoved = false;
@@ -74,15 +296,12 @@ void setup() {
   delay(2000);
   Serial.begin(115200);
   delay(1000);
-
   NimBLEDevice::init("");
-
   // Keep trying until connected (on the launch pad)
   while (!connectToRocketDoor()) {
     delay(2000);
   }
-
-  Serial.println("Sleeping until DEPLOY is received...");
+  Serial.println("Idle until DEPLOY is received...");
 }
 
 void loop() {
@@ -99,10 +318,12 @@ void loop() {
     if (runRoverSettup){
       runRoverSettup = false;
       //Call Rover settup function to init everything
+      setupRover();
       Serial.println("Settup Rover Data");
     }
   }else{
     //Loop all the normal stuff for Rover and Lora with modules
+    loopRover();
     Serial.println("All data on Lora");
   }
 }
