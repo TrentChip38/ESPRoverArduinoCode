@@ -1,6 +1,6 @@
 #include "FS.h"
 #include "LittleFS.h"
-String file_name = "/data2.txt";
+String file_name = "/dataTest.txt";  //"/data2.txt";
 void setup() {
   Serial.begin(115200);
   if(!LittleFS.begin()){ return; }

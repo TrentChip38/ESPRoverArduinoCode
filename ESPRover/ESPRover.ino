@@ -22,7 +22,7 @@ RX -> 17
 TX -> 16
 GND -> GND
 Motors:
-34,35
+2,18
 32,33
 Sense Pin: 25 (Unused)
 */
@@ -34,12 +34,18 @@ Sense Pin: 25 (Unused)
 #include <HardwareSerial.h>
 #include <SPI.h>
 #include <LoRa.h>
+#include "FS.h"
+#include "LittleFS.h"
+// Set to true to format the filesystem the first time it is used
+#define FORMAT_LITTLEFS_IF_FAILED true
+//File name to store data logged
+String file_name = "/dataTest.txt";
 
 //Motor pins
 int E1 = 33;
 int M1 = 32;
-int E2 = 34;
-int M2 = 35;
+int E2 = 2;
+int M2 = 18;
 //Sens pin
 int sense = 25;
 int speedValue = 200;
@@ -110,8 +116,6 @@ const unsigned long sendInterval = 5000; // 5 seconds
 //Functions from IREC_send original settup and loop
 void setupRover() {
   //Wait untill "DEPLOY"
-
-  Serial.begin(115200);
   delay(500);
   Serial.println("\n=== ESP32 BME280 + GPS + LoRa Node Booting ===");
 
@@ -195,9 +199,16 @@ void loopRover() {
   // Send packet every 5 seconds
   if (millis() - lastSend > sendInterval) {
     lastSend = millis();
-
+    //Creat LoRa packet payload
     String payload = generatePayload();
+    //Log payload data
+    File file = LittleFS.open(file_name, FILE_APPEND);
+    if(file) {
+      file.println(payload);
+      file.close();
+    }
 
+    //Send LoRa packet payload
     Serial.println("\nSending LoRa packet:");
     Serial.println(payload);
 
@@ -214,13 +225,13 @@ void loopRover() {
 
     LoRa.receive(); // back to RX
   }
-  if (digitalRead(sense) == HIGH){
-    delay(10000);
-    digitalWrite(M1,HIGH);//M1 is direction HIGH for clockwise low for counter clockwise
-    digitalWrite(M2,LOW);
-    analogWrite(E1, speedValue);   //PWM Speed Control
-    analogWrite(E2, speedValue);
-  }
+  // if (digitalRead(sense) == HIGH){
+  //   delay(10000);
+  //   digitalWrite(M1,HIGH);//M1 is direction HIGH for clockwise low for counter clockwise
+  //   digitalWrite(M2,LOW);
+  //   analogWrite(E1, speedValue);   //PWM Speed Control
+  //   analogWrite(E2, speedValue);
+  // }
 }
 
 bool runRoverSettup = true;
@@ -292,6 +303,25 @@ bool connectToRocketDoor() {
   return false;
 }
 
+void setupFS() {
+  //Start Little FS
+  if(!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)){
+    Serial.println("LittleFS Mount Failed");
+    return;
+  }
+  //Create/open file if not already existing
+  if (!LittleFS.exists(file_name)) {
+    Serial.println("File does not exist. Creating it now...");
+    File file = LittleFS.open(file_name, FILE_WRITE);
+    if(file) {
+      file.println("IREC Rover Weather Data");
+      file.close();
+    }
+  }else{
+    Serial.println("File already exists");
+  }
+}
+
 void setup() {
   delay(2000);
   Serial.begin(115200);
@@ -319,11 +349,12 @@ void loop() {
       runRoverSettup = false;
       //Call Rover settup function to init everything
       setupRover();
-      Serial.println("Settup Rover Data");
+      setupFS();
+      Serial.println("Setup Rover Data");
     }
   }else{
     //Loop all the normal stuff for Rover and Lora with modules
     loopRover();
-    Serial.println("All data on Lora");
+    //Serial.println("All data on Lora");
   }
 }
