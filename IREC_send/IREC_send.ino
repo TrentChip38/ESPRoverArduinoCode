@@ -25,7 +25,32 @@ D8  (io15) ---- NSS
 D12*(io26) ---- DIO0
 D4  (io27)  ---- REST (optional - NB: D4 is wired to the blue LED)  
 */
-
+/*Rover Wiring for all peripherals to the ESP32-WROOM-32E
+From peripheral to pin on ESP32
+Lora:
+Vcc -> 3.3v
+Miso -> 12
+Mosi -> 13
+SLCK -> 14
+NSS -> 15
+DIOD -> 26
+Rest -> 27
+GND -> GND
+BME:
+VIN -> 3.3v
+GND -> GND
+SCK -> 22
+SDI -> 21
+NEO GPS:
+Vcc -> 3.3v
+RX -> 17
+TX -> 16
+GND -> GND
+Motors:
+34,35
+32,33
+Sense Pin: 25 (Unused)
+*/
 //***************************************************************************field
 
 #include <Wire.h>
@@ -125,6 +150,8 @@ int M2 = 35;
 int sense = 25;
 int speedValue = 200;
 void setup() {
+  //Wait untill "DEPLOY"
+
   Serial.begin(115200);
   delay(500);
   Serial.println("\n=== ESP32 BME280 + GPS + LoRa Node Booting ===");
