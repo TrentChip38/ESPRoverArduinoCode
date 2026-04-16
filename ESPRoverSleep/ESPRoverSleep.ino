@@ -8,70 +8,85 @@ NimBLEClient* client = nullptr;
 NimBLERemoteCharacteristic* rxChar = nullptr;
 
 bool connected = false;
-bool scanning = false;
+bool deployReceived = false;
 
 void notifyCB(NimBLERemoteCharacteristic* chr, uint8_t* data, size_t len, bool notify) {
-  Serial.print("Received: ");
-  for (int i = 0; i < len; i++) Serial.print((char)data[i]);
-  Serial.println();
+  String msg = "";
+  for (int i = 0; i < len; i++) msg += (char)data[i];
+
+  Serial.println("Received: " + msg);
+
+  if (msg.indexOf("DEPLOY") >= 0) {
+    deployReceived = true;
+  }
 }
 
-void startScan() {
+bool scanForDevice() {
   NimBLEScan* scan = NimBLEDevice::getScan();
   scan->setActiveScan(true);
-  scan->start(0, false);   // continuous scan
-  scanning = true;
-  Serial.println("Scanning...");
-}
 
-void setup() {
-  Serial.begin(115200);
-  //Sleep until BLE event wakes it
-  esp_light_sleep_start();
+  Serial.println("Scan window...");
+  scan->start(1, false);   // 1 second scan
 
-  NimBLEDevice::init("");
-  startScan();
-}
+  NimBLEScanResults results = scan->getResults();
 
-void loop() {
-  if (!connected) {
-    NimBLEScanResults results = NimBLEDevice::getScan()->getResults();
+  for (int i = 0; i < results.getCount(); i++) {
+    const NimBLEAdvertisedDevice* device = results.getDevice(i);
 
-    for (int i = 0; i < results.getCount(); i++) {
-      const NimBLEAdvertisedDevice* device = results.getDevice(i);
+    if (device->isAdvertisingService(serviceUUID)) {
+      Serial.println("Found RocketDoor!");
+      scan->stop();
 
-      if (device->isAdvertisingService(serviceUUID)) {
-        Serial.println("Found RocketDoor!");
+      client = NimBLEDevice::createClient();
+      if (!client->connect(device)) {
+        Serial.println("Connect failed");
+        return false;
+      }
 
-        NimBLEDevice::getScan()->stop();
-        scanning = false;
+      NimBLERemoteService* svc = client->getService(serviceUUID);
+      rxChar = svc->getCharacteristic(charUUID);
 
-        client = NimBLEDevice::createClient();
-        if (!client->connect(device)) {
-          Serial.println("Connect failed, rescanning...");
-          startScan();
-          return;
-        }
-
-        NimBLERemoteService* svc = client->getService(serviceUUID);
-        rxChar = svc->getCharacteristic(charUUID);
-
-        if (rxChar->canNotify()) {
-          rxChar->subscribe(true, notifyCB);
-          Serial.println("Connected and subscribed!");
-          connected = true;
-        }
-        return;
+      if (rxChar->canNotify()) {
+        rxChar->subscribe(true, notifyCB);
+        Serial.println("Connected and subscribed!");
+        connected = true;
+        return true;
       }
     }
   }
 
-  // If connection drops, restart scan
-  if (connected && !client->isConnected()) {
-    Serial.println("Disconnected! Restarting scan...");
-    connected = false;
-    startScan();
+  return false;
+}
+
+void lightSleepSeconds(int seconds) {
+  esp_sleep_enable_timer_wakeup(seconds * 1000000ULL);
+  esp_light_sleep_start();
+}
+
+void setup() {
+  Serial.begin(115200);
+  NimBLEDevice::init("");
+}
+
+void loop() {
+  if (!connected) {
+    if (!scanForDevice()) {
+      Serial.println("Sleeping...");
+      lightSleepSeconds(5);   // << LOW POWER PART
+      return;
+    }
   }
 
-  delay(500);
+  if (deployReceived) {
+    Serial.println("DEPLOY received!");
+    // Turn on LoRa, GPS, BME here
+    while (true);
+  }
+
+  if (connected && !client->isConnected()) {
+    Serial.println("Disconnected, retrying...");
+    connected = false;
+  }
+
+  delay(200);
 }
