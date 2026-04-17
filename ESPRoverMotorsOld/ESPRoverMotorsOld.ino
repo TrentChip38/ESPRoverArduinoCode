@@ -23,8 +23,8 @@
 
 int E1 = 33;
 int M1 = 32;
-int E2 = 34;
-int M2 = 35;
+int E2 = 2;
+int M2 = 18;
 
 void setup()
 {
@@ -44,13 +44,13 @@ void loop()
     delay(30);
   }
 
-   for(value = 0 ; value <= 255; value+=5)
-  {
-    digitalWrite(M1,LOW);//M1 is direction HIGH for clockwise low for counter clockwise
-    digitalWrite(M2,HIGH);
-    analogWrite(E1, value);   //PWM Speed Control
-    analogWrite(E2, value);   //PWM Speed Control
-    delay(30);
-  }
+  //  for(value = 0 ; value <= 255; value+=5)
+  // {
+  //   digitalWrite(M1,LOW);//M1 is direction HIGH for clockwise low for counter clockwise
+  //   digitalWrite(M2,HIGH);
+  //   analogWrite(E1, value);   //PWM Speed Control
+  //   analogWrite(E2, value);   //PWM Speed Control
+  //   delay(30);
+  // }
 
 }
