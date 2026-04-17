@@ -9,13 +9,13 @@ void setup() {
 }
 
 void loop() {
-  // Closed position
-  doorServo.write(0);
-  delay(2000);
+  // // Closed position
+  // doorServo.write(0);
+  // delay(2000);
 
-  // Open position
-  doorServo.write(90);
-  delay(2000);
+  // // Middle position
+  // doorServo.write(90);
+  // delay(2000);
 
   // Fully open
   doorServo.write(160);

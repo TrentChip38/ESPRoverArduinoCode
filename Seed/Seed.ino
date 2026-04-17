@@ -5,12 +5,16 @@
 // #include <Servo.h>
 #include <LSM6DS3.h>
 #include <Wire.h>
+#include <Servo.h>
+//Make servo for door
+Servo doorServo;
+const int servoPin = 4;   // XIAO pin D4
 //Instantiate bluetooth
 BLEUart bleuart;
 //Instantiate the IMU
 LSM6DS3 imu(I2C_MODE, 0x6A);
 //Sample rate and thresholds
-const float LAUNCH_THRESHOLD = 1.5; // g
+const float LAUNCH_THRESHOLD = 4.0; // 4g
 const float LAUNCH_THRESHOLD_TIME = 1000; // 1000 ms = 1 sec
 const float LANDING_THRESHOLD_HIGH = 1.1; // g
 const float LANDING_THRESHOLD_LOW = 0.95; // g
@@ -22,6 +26,7 @@ const int sampleRateHz = 50;
 unsigned long startTime = 0;
 unsigned long currentTime = 0;
 unsigned long elapsedTime = 0;
+unsigned int total_flight_amount = 1000 * 60 * 10;//10 min
 
 //ENUM for STATE
 enum SeedState {
@@ -34,15 +39,13 @@ enum SeedState {
   DEPLOY
 };
 SeedState STATE = WAITING_FOR_LAUNCH;
-//4g for 2 sec
+//4g for 1 sec
 //Wait 10 min
-//Check not less than 1g (free fall)
+//Check not less than 1g (free fall) or greater (moving)
 
-// Servo doorServo;
 
-const int servoPin = 5;
-bool deployed = false;
-bool landed = false;
+// bool deployed = false;
+// bool landed = false;
 
 void setup() {
   Serial.begin(115200);
@@ -51,7 +54,7 @@ void setup() {
     while (1);
   }
   //Servo setup and latch door on boot?
-  // doorServo.attach(servoPin);
+  doorServo.attach(servoPin);
   // doorServo.write(0); // door closed
   //Set up BLE advertised data
   Bluefruit.begin();
@@ -69,13 +72,13 @@ void setup() {
   Bluefruit.Advertising.start(0);     // advertise forever
 }
 
-void openDoorAndSignal() {
-  // doorServo.write(90);   // open door
-  delay(2000);
-
-  bleuart.println("DEPLOY");
-  deployed = true;
-}
+// void openDoorAndSignal() {
+//   // Fully open
+//   doorServo.write(160);
+//   delay(2000);
+//   bleuart.println("DEPLOY");
+//   deployed = true;
+// }
 float readIMU() {
   float ax = imu.readFloatAccelX();
   float ay = imu.readFloatAccelY();
@@ -129,7 +132,7 @@ void loop() {
     }
   }else if (STATE == IN_FLIGHT) {
     //bleuart.println("FLIGHT");
-      delay(1000 * 10); // wait for min duration of flight
+      delay(total_flight_amount); // wait for min duration of flight
       //Flight should be 7 min. We will wait 10 min.
       STATE = LANDING;
       land_counter = 0;
@@ -149,23 +152,24 @@ void loop() {
       //     send_rover_signal();
       //     break;
       // }
-      delay(6 * 1000);   // 60 s post-landing delay
+      // Fully open
+      doorServo.write(160);
+      delay(2000);
+      //delay(6 * 1000);   // 60 s post-landing delay
       STATE = DEPLOY;
-      landed = true;
   }else if (STATE == OPEN) {
     //bleuart.println("OPEN");
-      landed = true;//Open door then wait
   }else if (STATE == DEPLOY) {
     //Only bleuart print is for DEPLOY cause any BLE event wakes ESP
     bleuart.println("DEPLOY");
-      landed = true;
+      //landed = true;
   }
 
   delay(1000 / sampleRateHz);
 
-  //After landing and delay, open door and signal rover
-  if (landed && !deployed) {
-    delay(6 * 1000);   // 60 s post-landing delay
-    openDoorAndSignal();
-  }
+  // //After landing and delay, open door and signal rover
+  // if (landed && !deployed) {
+  //   delay(6 * 1000);   // 60 s post-landing delay
+  //   openDoorAndSignal();
+  // }
 }
