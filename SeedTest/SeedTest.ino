@@ -10,7 +10,7 @@ BLEUart bleuart;
 //Instantiate the IMU
 LSM6DS3 imu(I2C_MODE, 0x6A);
 //Sample rate and thresholds
-const float LAUNCH_THRESHOLD = 4.0; // g
+const float LAUNCH_THRESHOLD = 1.2; // g
 const float LAUNCH_THRESHOLD_TIME = 1000; // 1000 ms = 1 sec
 const float LANDING_THRESHOLD_HIGH = 1.1; // g
 const float LANDING_THRESHOLD_LOW = 0.95; // g
