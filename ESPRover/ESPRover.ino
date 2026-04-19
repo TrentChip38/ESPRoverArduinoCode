@@ -39,7 +39,7 @@ Sense Pin: 25 (Unused)
 // Set to true to format the filesystem the first time it is used
 #define FORMAT_LITTLEFS_IF_FAILED true
 //File name to store data logged
-String file_name = "/dataTest3.txt";
+String file_name = "VegasLaunch.txt";//"/dataTest3.txt";
 
 //Motor pins
 // int E1 = 18;
@@ -55,17 +55,18 @@ void initMotors(){
   //Set up motor pins
   pinMode(M1, OUTPUT);
   pinMode(M2, OUTPUT);
-  // pinMode(E1, OUTPUT);
-  // pinMode(E2, OUTPUT);
+  pinMode(E1, OUTPUT);
+  pinMode(E2, OUTPUT);
 }
 void moveMotors(){
   int value;
+  int speed = 254;
   for(value = 0 ; value <= 255; value+=5)
   {
     digitalWrite(M1,HIGH);//M1 is direction HIGH for clockwise low for counter clockwise   
     digitalWrite(M2,LOW);
-    analogWrite(E1, value);   //PWM Speed Control
-    analogWrite(E2, value);   //PWM Speed Control
+    analogWrite(E1, speed);   //PWM Speed Control
+    analogWrite(E2, speed);   //PWM Speed Control
     delay(30);
   }
   digitalWrite(M1,LOW);
@@ -362,10 +363,10 @@ void loop() {
     return;
   }else if (!roverMoved){
     //Rover Move
-    initMotors();
-    delay(1000);
-    moveMotors();
-    delay(1000);
+    // initMotors();
+    // delay(1000);
+    // moveMotors();
+    // delay(1000);
     Serial.println("Rover Moves");
     roverMoved = true;
     // start LoRa, GPS, BME once here
