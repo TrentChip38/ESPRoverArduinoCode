@@ -36,20 +36,22 @@ void setup()
 int speedValue = 255;
 void loop()
 {
-  int value;
-  for(value = 0 ; value <= 255; value+=5)
-  {
-    digitalWrite(E1,HIGH);
-    digitalWrite(E2,HIGH);
-    analogWrite(M1, value);   //PWM Speed Control
-    analogWrite(M2, value);   //PWM Speed Control
-    delay(30);
-  }
+  // int value;
+  // for(value = 0 ; value <= 255; value+=5)
+  // {
+  //   digitalWrite(M1,HIGH);
+  //   digitalWrite(M2,LOW);
+  //   analogWrite(E1, value);   //PWM Speed Control
+  //   analogWrite(E2, value);   //PWM Speed Control
+  //   delay(30);
+  // }
 
 
-  // digitalWrite(M1,HIGH);
-  // digitalWrite(M2,HIGH);
+  digitalWrite(M1,HIGH);
+  digitalWrite(M2,LOW);
+  digitalWrite(E1,HIGH);
+  digitalWrite(E2,HIGH);
   // analogWrite(E1, speedValue);   //PWM Speed Control
   // analogWrite(E2, speedValue);   //PWM Speed Control
-  // delay(30);
+  delay(30);
 }
